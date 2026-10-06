@@ -3,7 +3,7 @@ import { readdirSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { config } from './config.js';
+import { config, assertBotConfig } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +29,7 @@ async function getCommands() {
 }
 
 async function deploy() {
+  assertBotConfig();
   const commands = await getCommands();
   const rest = new REST({ version: '10' }).setToken(config.token);
 

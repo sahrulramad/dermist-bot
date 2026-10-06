@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { sendLog } from '../../utils/logger.js';
 
@@ -14,7 +14,7 @@ export default {
     const reason = interaction.options.getString('alasan') ?? 'Tidak ada alasan';
 
     if (channel.id === interaction.channel?.id) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Tidak bisa menghapus channel tempat kamu menjalankan command ini.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Tidak bisa menghapus channel tempat kamu menjalankan command ini.')], flags: MessageFlags.Ephemeral });
     }
 
     const name = channel.name;

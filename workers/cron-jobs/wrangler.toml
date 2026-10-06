@@ -1,0 +1,28 @@
+name = "dermist-cron-jobs"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Workers AI binding
+[ai]
+binding = "AI"
+
+# KV Namespace — sama dengan ai-agent worker
+[[kv_namespaces]]
+binding = "KV"
+id = "3cf71188b1d14f09a788b1580b8773c0"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Cron Triggers
+[triggers]
+crons = [
+  "0 1 * * *",   # 08:00 WIB (UTC+7) — Daily Report
+  "*/15 * * * *", # Setiap 15 menit — Warning Escalation Check
+  "*/5 * * * *",  # Setiap 5 menit — Anti-Raid State Cleanup
+]
+
+# Secrets (di-set via: wrangler secret put SECRET_NAME)
+# - DISCORD_BOT_TOKEN: token bot untuk kirim pesan via REST API
+# - DISCORD_GUILD_ID: ID server utama

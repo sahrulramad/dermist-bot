@@ -1,7 +1,8 @@
 import { config } from '../config.js';
 import { log } from './logger.js';
-import { getToolSchemas, isDestructive, executeTool } from './tools.js';
+import { getToolSchemas, isDestructive, isModerationTool, isInformationalTool, executeTool } from './tools.js';
 import { notifyModerationAction } from './notifier.js';
+import { workerChat } from './worker-client.js';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4/accounts';
 const TEXT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -33,49 +34,83 @@ export function setPendingAction(chatId, action) {
 export async function runAgent(userMessage, userName, contextBlocks, ctx) {
   const { persona = '', skills = '', facts = '', server = '', history = [] } = contextBlocks;
   const toolSchemas = getToolSchemas();
+  const userDisplay = ctx?.userDisplayName || ctx?.message?.member?.displayName || userName;
+  const userAuthorId = ctx?.message?.author?.id || 'unknown';
 
-  const systemPrompt = `Kamu adalah Dermist, asisten AI SE-OTONOM di server Discord. Kamu bisa mengambil tindakan moderasi sendiri menggunakan tools.${persona}${skills}${facts}${server}
+  let toolCalls = [];
+  let textResponse = '';
+
+  if (config.workerBaseUrl) {
+    try {
+      const workerRes = await workerChat({
+        userMessage,
+        userName,
+        userId: ctx?.message?.author?.id,
+        serverContext: server,
+        persona,
+        skills,
+        triggerReason: ctx?.triggerReason,
+      });
+
+      if (workerRes && !workerRes.error) {
+        textResponse = workerRes.reply || '';
+        toolCalls = workerRes.toolCalls || [];
+      }
+    } catch (err) {
+      log(`Worker chat error, falling back to direct AI: ${err.message}`, 'warning');
+    }
+  }
+
+  // Fallback ke direct Cloudflare AI jika Worker tidak diset atau tidak merespons
+  if (!textResponse && toolCalls.length === 0) {
+    const systemPrompt = `Kamu adalah Dermist, asisten AI ramah, cerdas, dan santai di server Discord. Kamu punya kepribadian yang asik, solutif, dan mengerti seluruh konteks server.${persona}${skills}${facts}${server}
 
 ATURAN PENTING:
-- Kamu BOLEH memanggil tools untuk kick, mute, warn, purge OTOMATIS tanpa konfirmasi.
-- Untuk BAN dan DELETE CHANNEL, kamu tetap bisa memanggil tool-nya, tapi bot akan minta konfirmasi user dulu.
-- Gunakan get_member_info untuk cari info member sebelum mengambil tindakan.
-- Jangan mengarang informasi. Gunakan data server yang diberikan.
-- Jika user sebut nama (bukan ID), cari member berdasarkan username di data server, lalu pakai ID-nya.
-- Ambil keputusan dengan bijak. Mute dulu untuk pelanggaran ringan, kick untuk menengah, ban untuk berat.
-- Jawab singkat dan jelas. Jelaskan tindakan yang kamu ambil.
-Nama user: ${userName}.`;
+- User saat ini: ${userDisplay} (username: @${userName}, ID: ${userAuthorId}).
+- PANGGIL USER DENGAN NAMA TAMPILANNYA: "${userDisplay}" (JANGAN panggil dengan username teknis @${userName} kecuali diminta).
+- JAWAB PERTANYAAN USER SECARA SPESIFIK & RELEVAN:
+  * Jika user bertanya tentang dirinya ("gua siapa", "kenal gua gak"), jawab bahwa dia adalah ${userDisplay} dan status/role-nya di server (misal Owner).
+  * Jika user bertanya tentang anggota/member server ("lu tau member member kita gak", "siapa aja member di sini", dll), sebutkan nama-nama member yang ada di server berdasarkan <data_server> atau panggil tool get_server_members! JANGAN malah mengulang-ulang jawaban bahwa user adalah owner.
+- Kamu BOLEH memanggil tools jika butuh data lebih lanjut atau aksi moderasi:
+  * get_member_info: untuk cek detail 1 orang member.
+  * get_server_members: untuk cek daftar seluruh member di server.
+  * kick_member, mute_member, warn_member, purge_messages: untuk aksi moderasi otomatis.
+- Gaya bicara: Bahasa Indonesia gaul/santai, akrab, ramah, dan solutif.`;
 
-  const messages = [{ role: 'system', content: systemPrompt }];
-  for (const h of history) {
-    messages.push({ role: h.role, content: h.content });
+    const messages = [{ role: 'system', content: systemPrompt }];
+    for (const h of history) {
+      messages.push({ role: h.role, content: h.content });
+    }
+    messages.push({ role: 'user', content: userMessage });
+
+    const res = await fetch(`${API_BASE}/${config.cfAccountId}/ai/run/${TEXT_MODEL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.cfApiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ messages, tools: toolSchemas }),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      const errMsg = data.errors?.map((e) => e.message).join(', ') || 'Unknown error';
+      throw new Error(`AI error: ${errMsg}`);
+    }
+
+    const result = data.result;
+    toolCalls = result.tool_calls || [];
+    textResponse = result.response || '';
   }
-  messages.push({ role: 'user', content: userMessage });
-
-  const res = await fetch(`${API_BASE}/${config.cfAccountId}/ai/run/${TEXT_MODEL}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.cfApiToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ messages, tools: toolSchemas }),
-  });
-
-  const data = await res.json();
-  if (!data.success) {
-    const errMsg = data.errors?.map((e) => e.message).join(', ') || 'Unknown error';
-    throw new Error(`AI error: ${errMsg}`);
-  }
-
-  const result = data.result;
-  const toolCalls = result.tool_calls;
-  const textResponse = result.response || '';
 
   if (!toolCalls || toolCalls.length === 0) {
     return { reply: textResponse || '(tidak ada jawaban)', pendingAction: false };
   }
 
   const executedResults = [];
+  const rawResults = [];
+  let hasInfoTool = false;
+
   for (const tc of toolCalls) {
     const toolName = tc.name;
     const args = tc.arguments || {};
@@ -91,18 +126,65 @@ Nama user: ${userName}.`;
       const toolResult = await executeTool(toolName, args, ctx);
       log(`Tool dieksekusi: ${toolName} → ${toolResult.slice(0, 80)}`, 'success');
       executedResults.push(`✅ ${toolResult}`);
+      rawResults.push(`[${toolName}]: ${toolResult}`);
 
-      const target = args.userId ? `<@${String(args.userId).replace(/[<@!>]/g, '')}>` : args.channelId ?? 'N/A';
-      await notifyModerationAction(ctx.guild, toolResult, {
-        toolName,
-        target,
-        reason: args.reason ?? (ctx.triggerReason ?? 'AI decision'),
-        result: toolResult,
-        auto: true,
-      });
+      if (isInformationalTool(toolName)) {
+        hasInfoTool = true;
+      }
+
+      if (isModerationTool(toolName)) {
+        const target = args.userId ? `<@${String(args.userId).replace(/[<@!>]/g, '')}>` : args.channelId ?? 'N/A';
+        await notifyModerationAction(ctx.guild, toolResult, {
+          toolName,
+          target,
+          reason: args.reason ?? (ctx.triggerReason ?? 'AI decision'),
+          result: toolResult,
+          auto: true,
+        });
+      }
     } catch (err) {
       log(`Tool error: ${toolName}: ${err.message}`, 'error');
       executedResults.push(`❌ ${toolName}: ${err.message}`);
+      rawResults.push(`[${toolName} error]: ${err.message}`);
+    }
+  }
+
+  // Jika tool berupa info (seperti get_member_info, get_server_members) ATAU belum ada balasan kalimat conversational:
+  // Buat conversational follow-up agar AI merangkai jawaban ramah & natural berdasarkan hasil tool!
+  if (hasInfoTool || !textResponse) {
+    try {
+      const followUpMessages = [
+        {
+          role: 'system',
+          content: `Kamu adalah Dermist, asisten AI Discord yang santai, cerdas, bersahabat, dan seru.${persona}${skills}
+Gunakan hasil data eksekusi tool di bawah untuk menjawab pesan user secara natural dan mengalir dalam bahasa Indonesia.
+PANGGIL USER DENGAN NAMA TAMPILANNYA: "${userDisplay}" (JANGAN panggil dengan username teknis @${userName}).
+JANGAN tampilkan raw debug/JSON atau format mentah tool. Jawab secara tepat, to-the-point, dan relevan apa yang ditanyakan user!
+User saat ini: ${userDisplay} (username: @${userName}).`,
+        },
+        { role: 'user', content: userMessage },
+        {
+          role: 'user',
+          content: `[Hasil Eksekusi Tool:\n${rawResults.join('\n')}\n]\nBerikan jawaban ramah, santai, dan relevan untuk pertanyaan user di atas:`,
+        },
+      ];
+
+      const res = await fetch(`${API_BASE}/${config.cfAccountId}/ai/run/${TEXT_MODEL}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.cfApiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: followUpMessages }),
+      });
+
+      const data = await res.json();
+      if (data.success && (data.result?.response || data.result?.choices?.[0]?.message?.content)) {
+        const aiFinalReply = data.result.response || data.result.choices[0].message.content;
+        return { reply: aiFinalReply.trim(), pendingAction: false };
+      }
+    } catch (err) {
+      log(`Follow-up conversational AI error: ${err.message}`, 'warning');
     }
   }
 

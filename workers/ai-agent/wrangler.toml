@@ -1,0 +1,20 @@
+name = "dermist-ai-agent"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Workers AI binding
+[ai]
+binding = "AI"
+
+# KV Namespace — ganti ID setelah menjalankan: wrangler kv namespace create DERMIST_KV
+[[kv_namespaces]]
+binding = "KV"
+id = "3cf71188b1d14f09a788b1580b8773c0"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets (di-set via: wrangler secret put SECRET_NAME)
+# - AUTH_SECRET: shared secret untuk autentikasi antara bot ↔ worker
+# - DISCORD_BOT_TOKEN: token bot untuk Discord REST API

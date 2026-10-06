@@ -27,8 +27,13 @@ export function buildLogEmbed({ title, description, fields = [], color = COLORS.
 }
 
 export async function sendLog(guild, embedData) {
-  if (!config.logChannelId) return;
-  const channel = guild.channels.cache.get(config.logChannelId);
+  let targetId = config.logChannelId;
+  let channel = targetId ? guild.channels.cache.get(targetId) : null;
+
+  if (!channel) {
+    channel = guild.channels.cache.find((c) => c.name.includes('mod-log') || c.name.includes('admin-dermist'));
+  }
+
   if (!channel) return;
   try {
     await channel.send({ embeds: [buildLogEmbed(embedData)] });

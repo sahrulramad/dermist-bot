@@ -7,7 +7,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "deploy": "node src/deploy-commands.js",
+    "worker:ai:dev": "npm --prefix workers/ai-agent run dev",
+    "worker:ai:deploy": "npm --prefix workers/ai-agent run deploy",
+    "worker:cron:dev": "npm --prefix workers/cron-jobs run dev",
+    "worker:cron:deploy": "npm --prefix workers/cron-jobs run deploy",
+    "vault:sync": "node scripts/vault-sync.js"
   },
   "engines": {
     "node": ">=18.0.0"

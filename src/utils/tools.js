@@ -2,7 +2,74 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { log } from './logger.js';
 
 function cleanUserId(raw) {
-  return raw.replace(/[<@!>]/g, '').trim();
+  return String(raw || '').replace(/[<@!>]/g, '').trim();
+}
+
+export async function resolveMember(guild, rawInput, ctx) {
+  if (!guild) return null;
+
+  const raw = String(rawInput ?? '').trim();
+  const selfPronouns = ['me', 'gua', 'gw', 'aku', 'saya', 'self', 'author', 'sender', 'diriku', 'gue', 'mine', 'saya sendiri'];
+
+  // 1. If empty or self-pronoun, return author's member
+  if (!raw || selfPronouns.includes(raw.toLowerCase())) {
+    if (ctx?.message?.member) return ctx.message.member;
+    if (ctx?.message?.author?.id) {
+      const m = await guild.members.fetch(ctx.message.author.id).catch(() => null);
+      if (m) return m;
+    }
+  }
+
+  // 2. Check if it's a mention or snowflake ID (17-20 digits)
+  const idMatch = raw.replace(/[<@!>]/g, '').trim();
+  if (/^\d{17,20}$/.test(idMatch)) {
+    const member = await guild.members.fetch(idMatch).catch(() => null);
+    if (member) return member;
+  }
+
+  const qLower = raw.toLowerCase();
+
+  // 3. Quick check against message author (matching username, tag, displayName, or nickname)
+  if (ctx?.message?.member) {
+    const m = ctx.message.member;
+    if (
+      m.user.username.toLowerCase() === qLower ||
+      m.user.tag.toLowerCase() === qLower ||
+      m.displayName.toLowerCase() === qLower ||
+      (m.nickname && m.nickname.toLowerCase() === qLower)
+    ) {
+      return m;
+    }
+  }
+
+  // 4. Exact match in guild members cache
+  let found = guild.members.cache.find((m) =>
+    m.user.username.toLowerCase() === qLower ||
+    m.user.tag.toLowerCase() === qLower ||
+    m.displayName.toLowerCase() === qLower ||
+    (m.nickname && m.nickname.toLowerCase() === qLower)
+  );
+  if (found) return found;
+
+  // 5. Discord API query fetch (server-side member search)
+  try {
+    const fetched = await guild.members.fetch({ query: raw, limit: 1 });
+    if (fetched && fetched.size > 0) {
+      return fetched.first();
+    }
+  } catch {
+    // Ignore fetch query error
+  }
+
+  // 6. Substring match in guild cache
+  found = guild.members.cache.find((m) =>
+    m.user.username.toLowerCase().includes(qLower) ||
+    m.displayName.toLowerCase().includes(qLower) ||
+    (m.nickname && m.nickname.toLowerCase().includes(qLower))
+  );
+  if (found) return found;
+
+  return null;
 }
 
 function parseDuration(d) {
@@ -23,7 +90,7 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, atau nama member' },
           reason: { type: 'string', description: 'Alasan kick' },
         },
         required: ['userId'],
@@ -39,7 +106,7 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, atau nama member' },
           reason: { type: 'string', description: 'Alasan ban' },
           deleteMessageDays: { type: 'number', description: 'Hapus pesan X hari (0-7)' },
         },
@@ -56,7 +123,7 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, atau nama member' },
           duration: { type: 'string', description: "Durasi: '60s', '5m', '1h', '1d'" },
           reason: { type: 'string', description: 'Alasan mute' },
         },
@@ -73,7 +140,7 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, atau nama member' },
         },
         required: ['userId'],
       },
@@ -88,7 +155,7 @@ export const tools = [
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, atau nama member' },
           reason: { type: 'string', description: 'Alasan warning' },
         },
         required: ['userId', 'reason'],
@@ -146,13 +213,26 @@ export const tools = [
     type: 'function',
     function: {
       name: 'get_member_info',
-      description: 'Ambil info member (username, join date, role). Read-only.',
+      description: 'Ambil info lengkap satu member Discord (username, display name, roles, join date, status owner/admin). Masukkan ID, @mention, username, nickname, atau kosongkan / isi "me"/"gua" untuk info user yang sedang berbicara.',
       parameters: {
         type: 'object',
         properties: {
-          userId: { type: 'string', description: 'User ID atau @mention' },
+          userId: { type: 'string', description: 'User ID, @mention, username/nickname, atau "me"/"gua" untuk info diri sendiri' },
         },
-        required: ['userId'],
+      },
+    },
+    destructive: false,
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_server_members',
+      description: 'Ambil daftar seluruh member di server ini (nama display, username, status online/offline, role, bot vs manusia). Gunakan saat user bertanya tentang siapa saja member di server, ada siapa saja, atau "member-member kita".',
+      parameters: {
+        type: 'object',
+        properties: {
+          filter: { type: 'string', enum: ['all', 'humans', 'bots'], description: 'Filter tipe member' },
+        },
       },
     },
     destructive: false,
@@ -168,54 +248,80 @@ export function isDestructive(toolName) {
   return t?.destructive ?? false;
 }
 
+export function isModerationTool(toolName) {
+  return [
+    'kick_member',
+    'ban_member',
+    'mute_member',
+    'unmute_member',
+    'warn_member',
+    'purge_messages',
+    'create_channel',
+    'delete_channel',
+  ].includes(toolName);
+}
+
+export function isInformationalTool(toolName) {
+  return ['get_member_info', 'get_server_members'].includes(toolName);
+}
+
 export async function executeTool(toolName, args, ctx) {
   const { guild, channel, message } = ctx;
   const log2 = (msg) => log(`[tool:${toolName}] ${msg}`, 'info');
 
   switch (toolName) {
     case 'kick_member': {
-      const id = cleanUserId(String(args.userId));
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (!member) return `Gak nemu member "${args.userId || 'yang dimaksud'}".`;
       const reason = String(args.reason || 'Kicked by Dermist AI');
-      const member = await guild.members.fetch(id).catch(() => null);
-      if (!member) return 'Gak nemu member.';
-      if (!member.kickable) return 'Bot gak punya izin kick member ini.';
+      if (!member.kickable) return `Bot gak punya izin kick member ${member.user.tag}.`;
       await member.kick(reason);
       log2(`Kicked ${member.user.tag}: ${reason}`);
       return `Berhasil kick ${member.user.tag}. Alasan: ${reason}`;
     }
     case 'ban_member': {
-      const id = cleanUserId(String(args.userId));
+      let targetId = null;
+      let targetTag = args.userId;
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (member) {
+        targetId = member.id;
+        targetTag = member.user.tag;
+      } else {
+        const idMatch = String(args.userId || '').replace(/\D/g, '');
+        if (/^\d{17,20}$/.test(idMatch)) {
+          targetId = idMatch;
+          targetTag = `<@${targetId}>`;
+        }
+      }
+      if (!targetId) return `Gak nemu member "${args.userId}".`;
       const reason = String(args.reason || 'Banned by Dermist AI');
       const days = Math.min(Number(args.deleteMessageDays) || 0, 7);
-      await guild.members.ban(id, { deleteMessageSeconds: days * 86400, reason });
-      log2(`Banned ${id}: ${reason}`);
-      return `Berhasil ban <@${id}>. Alasan: ${reason}`;
+      await guild.members.ban(targetId, { deleteMessageSeconds: days * 86400, reason });
+      log2(`Banned ${targetTag}: ${reason}`);
+      return `Berhasil ban ${targetTag}. Alasan: ${reason}`;
     }
     case 'mute_member': {
-      const id = cleanUserId(String(args.userId));
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (!member) return `Gak nemu member "${args.userId || 'yang dimaksud'}".`;
       const dur = parseDuration(String(args.duration || '5m'));
       if (!dur) return `Durasi gak valid: ${args.duration}`;
       const reason = String(args.reason || 'Muted by Dermist AI');
-      const member = await guild.members.fetch(id).catch(() => null);
-      if (!member) return 'Gak nemu member.';
-      if (!member.moderatable) return 'Bot gak punya izin mute member ini.';
+      if (!member.moderatable) return `Bot gak punya izin mute member ${member.user.tag}.`;
       await member.timeout(dur, reason);
       log2(`Muted ${member.user.tag} for ${args.duration}`);
       return `Berhasil mute ${member.user.tag} selama ${args.duration}. Alasan: ${reason}`;
     }
     case 'unmute_member': {
-      const id = cleanUserId(String(args.userId));
-      const member = await guild.members.fetch(id).catch(() => null);
-      if (!member) return 'Gak nemu member.';
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (!member) return `Gak nemu member "${args.userId || 'yang dimaksud'}".`;
       await member.timeout(null);
       log2(`Unmuted ${member.user.tag}`);
       return `Berhasil unmute ${member.user.tag}.`;
     }
     case 'warn_member': {
-      const id = cleanUserId(String(args.userId));
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (!member) return `Gak nemu member "${args.userId || 'yang dimaksud'}".`;
       const reason = String(args.reason || 'Warned by Dermist AI');
-      const member = await guild.members.fetch(id).catch(() => null);
-      if (!member) return 'Gak nemu member.';
       log2(`Warned ${member.user.tag}: ${reason}`);
       try { await member.send(`⚠️ Kamu di-warn di ${guild.name}: ${reason}`); } catch { /* DM closed */ }
       return `Berhasil warn ${member.user.tag}. Alasan: ${reason}`;
@@ -250,11 +356,55 @@ export async function executeTool(toolName, args, ctx) {
       return `Berhasil hapus channel #${name}.`;
     }
     case 'get_member_info': {
-      const id = cleanUserId(String(args.userId));
-      const member = await guild.members.fetch(id).catch(() => null);
-      if (!member) return 'Gak nemu member.';
-      const roles = member.roles.cache.filter((r) => r.id !== guild.id).map((r) => r.name).join(', ') || 'none';
-      return `Member: ${member.user.tag}\nID: ${member.id}\nJoin: <t:${Math.floor(member.joinedTimestamp / 1000)}:R>\nRoles: ${roles}`;
+      const member = await resolveMember(guild, args.userId, ctx);
+      if (!member) return `Gak nemu member "${args.userId || 'kamu'}".`;
+      const roleList = member.roles?.cache ? Array.from(member.roles.cache.values()) : [];
+      const roles = roleList
+        .filter((r) => r.id !== guild.id)
+        .map((r) => r.name)
+        .join(', ') || 'tidak ada role';
+      const isOwner = member.id === guild.ownerId;
+      const isAdmin = Boolean(member.permissions?.has?.(PermissionFlagsBits.Administrator));
+      const joined = member.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'Unknown';
+      const dispName = member.displayName || member.user.username;
+      const nickStr = member.nickname ? ` (Nickname Server: ${member.nickname})` : '';
+      const statusTitle = isOwner ? '👑 Owner Server' : isAdmin ? '🛡️ Admin' : 'Member';
+      return `Nama Tampilan / Display: ${dispName}${nickStr}\nUsername Discord: @${member.user.username}\nID: ${member.id}\nStatus: ${statusTitle}\nRoles: ${roles}\nBergabung: ${joined}`;
+    }
+    case 'get_server_members': {
+      await guild.members.fetch().catch(() => null);
+      const allMembers = Array.from(guild.members.cache.values());
+      const filter = String(args.filter || 'all').toLowerCase();
+
+      let targetMembers = allMembers;
+      if (filter === 'humans') targetMembers = allMembers.filter((m) => !m.user.bot);
+      if (filter === 'bots') targetMembers = allMembers.filter((m) => m.user.bot);
+
+      const humanLines = allMembers
+        .filter((m) => !m.user.bot)
+        .map((m) => {
+          const isOwner = m.id === guild.ownerId ? ' [👑 Owner Server]' : '';
+          const roleList = (m.roles?.cache ? Array.from(m.roles.cache.values()) : [])
+            .filter((r) => r.id !== guild.id)
+            .map((r) => r.name)
+            .join(', ') || 'tidak ada role';
+          const status = m.presence?.status || 'offline';
+          const dispName = m.displayName || m.user.username;
+          return `- **${dispName}** (@${m.user.username})${isOwner} [status: ${status}] — Roles: ${roleList}`;
+        });
+
+      const botLines = allMembers
+        .filter((m) => m.user.bot)
+        .map((m) => `- **${m.displayName || m.user.username}** (@${m.user.username}) [Bot]`);
+
+      const totalHumans = allMembers.filter((m) => !m.user.bot).length;
+      const totalBots = allMembers.filter((m) => m.user.bot).length;
+
+      return `Total Member Server: ${allMembers.length} (${totalHumans} member manusia, ${totalBots} bot)
+Member Manusia:
+${humanLines.join('\n') || '- (kosong)'}
+Bot:
+${botLines.join('\n') || '- (kosong)'}`;
     }
     default:
       return `Tool "${toolName}" gak dikenal.`;

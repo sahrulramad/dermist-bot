@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { sendLog } from '../../utils/logger.js';
 
@@ -14,14 +14,14 @@ export default {
     const amount = interaction.options.getInteger('jumlah');
 
     if (!interaction.channel?.bulkDeletable) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak bisa menghapus pesan di channel ini.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak bisa menghapus pesan di channel ini.')], flags: MessageFlags.Ephemeral });
     }
 
     const deleted = await interaction.channel.bulkDelete(amount, true);
 
     await interaction.reply({
       embeds: [successEmbed('Pesan Dihapus', `Berhasil menghapus **${deleted.size}** pesan.`)],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
 
     await sendLog(interaction.guild, {

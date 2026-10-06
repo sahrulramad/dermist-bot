@@ -1,5 +1,5 @@
 import { Events } from 'discord.js';
-import { trackVoiceJoin, trackVoiceLeave } from '../utils/voice-afk.js';
+import { trackVoiceJoin, trackVoiceLeave, resetVoiceAfk } from '../utils/voice-afk.js';
 import { log } from '../utils/logger.js';
 
 export default {
@@ -20,6 +20,15 @@ export default {
       trackVoiceLeave(userId);
       trackVoiceJoin(userId, isInVoice);
       log(`Voice move: ${newState.member?.user.tag ?? userId} → <#${isInVoice}>`, 'info');
+    } else if (isInVoice) {
+      // User mengubah kondisi mic/audio/stream
+      if (!newState.selfDeaf && !newState.selfMute) {
+        resetVoiceAfk(userId);
+      }
+      if (newState.streaming || newState.selfVideo) {
+        resetVoiceAfk(userId);
+      }
     }
   },
 };
+

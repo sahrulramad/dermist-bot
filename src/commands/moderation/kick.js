@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { sendLog } from '../../utils/logger.js';
 
@@ -14,13 +14,13 @@ export default {
     const reason = interaction.options.getString('alasan') ?? 'Tidak ada alasan';
 
     if (!target) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan di server.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan di server.')], flags: MessageFlags.Ephemeral });
     }
     if (target.id === interaction.user.id) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Kamu tidak bisa kick diri sendiri.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Kamu tidak bisa kick diri sendiri.')], flags: MessageFlags.Ephemeral });
     }
     if (!target.kickable) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak punya izin untuk kick member ini (role terlalu tinggi).')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak punya izin untuk kick member ini (role terlalu tinggi).')], flags: MessageFlags.Ephemeral });
     }
 
     await target.kick(`oleh ${interaction.user.tag} — ${reason}`);

@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { sendLog } from '../../utils/logger.js';
 
@@ -18,13 +18,13 @@ export default {
     const days = interaction.options.getInteger('hari') ?? 0;
 
     if (!target) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan di server.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan di server.')], flags: MessageFlags.Ephemeral });
     }
     if (target.id === interaction.user.id) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Kamu tidak bisa ban diri sendiri.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Kamu tidak bisa ban diri sendiri.')], flags: MessageFlags.Ephemeral });
     }
     if (!target.bannable) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak punya izin untuk ban member ini.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Bot tidak punya izin untuk ban member ini.')], flags: MessageFlags.Ephemeral });
     }
 
     await target.ban({ deleteMessageSeconds: days * 86400, reason: `oleh ${interaction.user.tag} — ${reason}` });

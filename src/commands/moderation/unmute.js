@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { sendLog } from '../../utils/logger.js';
 
@@ -12,10 +12,10 @@ export default {
     const target = interaction.options.getMember('member');
 
     if (!target) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member tidak ditemukan.')], flags: MessageFlags.Ephemeral });
     }
     if (!target.isCommunicationDisabled()) {
-      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member ini sedang tidak di-mute.')], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed('Gagal', 'Member ini sedang tidak di-mute.')], flags: MessageFlags.Ephemeral });
     }
 
     await target.timeout(null);

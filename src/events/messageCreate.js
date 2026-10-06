@@ -3,7 +3,8 @@ import { runAgent, executePendingAction, hasPendingAction } from '../utils/agent
 import { isInjection, FALLBACK_REPLY } from '../utils/guards.js';
 import { getPersonaBlock } from '../utils/persona.js';
 import { getSkillsBlock } from '../utils/skills.js';
-import { factsBlock, addHistory, getHistory, shouldExtract, resetTurnCount, addFact } from '../utils/memory.js';
+import { memoBlock, addHistory, getHistory, shouldExtract, resetTurnCount, autoSaveExtractedFacts } from '../utils/memory.js';
+import { vaultBlock } from '../utils/vault.js';
 import { trackMessage, isSpamming, getSpamCount } from '../utils/spam-detect.js';
 import { isToxic, isSlur, getToxicReason } from '../utils/toxic-detect.js';
 import { extractFacts } from '../utils/cloudflare-ai.js';
@@ -12,47 +13,69 @@ import { trackPhotoMessage, getPhotoSpamInfo, hasBeenWarned, markWarned, resetUs
 import { log } from '../utils/logger.js';
 
 async function buildServerContext(guild) {
-  await guild.members.fetch({ withPresences: true });
-  const onlineMembers = guild.members.cache.filter((m) => !m.user.bot && m.presence?.status && m.presence.status !== 'offline');
-  const offlineCount = guild.memberCount - onlineMembers.size - guild.members.cache.filter((m) => m.user.bot).size;
+  await guild.members.fetch({ withPresences: true }).catch(() => {});
+  const allMembers = Array.from(guild.members.cache.values());
+  const humans = allMembers.filter((m) => !m.user.bot);
+  const bots = allMembers.filter((m) => m.user.bot);
 
-  const memberLines = onlineMembers.map((m) => {
-    const status = m.presence?.status ?? 'unknown';
-    const activities = m.presence?.activities?.filter((a) => a.type === 0).map((a) => a.name).filter(Boolean);
-    const activityStr = activities?.length ? ` (lagi main: ${activities.join(', ')})` : '';
-    const role = m.id === guild.ownerId ? ' [Owner]' : '';
-    return `- ${m.user.username} (ID:${m.id})${role} [${status}]${activityStr}`;
-  });
+  let memberLines = [];
+  if (humans.length <= 50) {
+    memberLines = humans.map((m) => {
+      const status = m.presence?.status ?? 'offline';
+      const activities = m.presence?.activities?.filter((a) => a.type === 0).map((a) => a.name).filter(Boolean);
+      const activityStr = activities?.length ? ` (lagi main: ${activities.join(', ')})` : '';
+      const role = m.id === guild.ownerId ? ' [👑 Owner]' : '';
+      const dispName = m.displayName || m.user.username;
+      const tagStr = m.user.username !== dispName ? ` (@${m.user.username})` : '';
+      return `- ${dispName}${tagStr} (ID:${m.id})${role} [${status}]${activityStr}`;
+    });
+  } else {
+    const online = humans.filter((m) => m.presence?.status && m.presence.status !== 'offline');
+    memberLines = online.slice(0, 30).map((m) => {
+      const status = m.presence?.status ?? 'unknown';
+      const role = m.id === guild.ownerId ? ' [👑 Owner]' : '';
+      const dispName = m.displayName || m.user.username;
+      return `- ${dispName} (@${m.user.username}) (ID:${m.id})${role} [${status}]`;
+    });
+  }
 
-  const botLines = guild.members.cache.filter((m) => m.user.bot).map((m) => `- ${m.user.username} [Bot]`);
+  const botLines = bots.map((m) => `- ${m.displayName || m.user.username} [Bot]`);
 
-  let context = `Nama server: ${guild.name}\nTotal member: ${guild.memberCount}\n`;
-  context += `Member online (${onlineMembers.size}):\n${memberLines.join('\n') || '- (tidak ada)'}`;
+  let context = `Nama server: ${guild.name}\nTotal member: ${guild.memberCount} (${humans.length} member manusia, ${bots.length} bot)\n`;
+  context += `Daftar Member:\n${memberLines.join('\n') || '- (tidak ada)'}`;
   if (botLines.length) context += `\nBot:\n${botLines.join('\n')}`;
-  context += `\nMember offline: ${offlineCount}`;
   return context;
 }
 
 async function handleAgentMessage(message, triggerReason) {
   const userId = message.author.id;
   const userName = message.author.username;
+  const userDisplayName = message.member?.displayName || message.author.displayName || userName;
   const content = message.content.replace(/<@!?\d+>/g, '').trim() || message.content;
 
   try {
     await message.channel.sendTyping();
 
+    const guildId = message.guild?.id || 'global';
     const serverContext = await buildServerContext(message.guild);
     const persona = getPersonaBlock();
     const skills = getSkillsBlock(content);
-    const facts = await factsBlock(userId, content);
+    
+    // Memo System (sudah termasuk legacy facts) + Obsidian Vault Knowledge
+    const [memos, vaultKnowledge] = await Promise.all([
+      memoBlock(guildId, userId, content),
+      vaultBlock(content),
+    ]);
+    const memoryAndKnowledge = memos + vaultKnowledge;
+
     const history = await getHistory(userId);
     const server = `\n\n<data_server>\n${serverContext}\n</data_server>`;
 
     const triggerInfo = triggerReason ? `\n\n<context_trigger>\n${triggerReason}\n</context_trigger>` : '';
     const userMsg = triggerReason ? `${content}\n\n[Trigger: ${triggerReason}]` : content;
 
-    const ctx = { guild: message.guild, channel: message.channel, message, chatId: message.channelId };
-    const { reply } = await runAgent(userMsg, userName, { persona, skills, facts, server: server + triggerInfo, history }, ctx);
+    const ctx = { guild: message.guild, channel: message.channel, message, chatId: message.channelId, userDisplayName };
+    const { reply } = await runAgent(userMsg, userName, { persona, skills, facts: memoryAndKnowledge, server: server + triggerInfo, history }, ctx);
 
     await addHistory(userId, 'user', content);
     await addHistory(userId, 'assistant', reply);
@@ -61,16 +84,13 @@ async function handleAgentMessage(message, triggerReason) {
     await message.reply({ content: truncated, allowedMentions: { users: [] } });
 
     if (await shouldExtract(userId, 5)) {
-      log(`Ekstrak fakta untuk ${userName}`, 'info');
+      log(`Ekstrak fakta/memo untuk ${userName}`, 'info');
       const recentHistory = await getHistory(userId);
       const convo = recentHistory.map((h) => `${h.role}: ${h.content}`).join('\n');
       try {
         const newFacts = await extractFacts(convo, userName);
-        let added = 0;
-        for (const f of newFacts) {
-          if (await addFact(userId, userName, f)) added++;
-        }
-        if (added) log(`${added} fakta disimpan untuk ${userName}`, 'success');
+        const added = await autoSaveExtractedFacts(userId, userName, newFacts);
+        if (added) log(`${added} fakta/memo diperbarui untuk ${userName}`, 'success');
         await resetTurnCount(userId);
       } catch (err) {
         log(`Gagal ekstrak fakta: ${err.message}`, 'error');
