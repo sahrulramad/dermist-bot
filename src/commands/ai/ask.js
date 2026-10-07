@@ -7,12 +7,11 @@ import { isInjection } from '../../utils/guards.js';
 import { getPersonaBlock } from '../../utils/persona.js';
 import { getSkillsBlock } from '../../utils/skills.js';
 import { memoBlock } from '../../utils/memory.js';
-import { vaultBlock } from '../../utils/vault.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('ask')
-    .setDescription('Tanya apa saja ke AI (Cloudflare Workers AI + Obsidian Knowledge Base)')
+    .setDescription('Tanya apa saja ke AI (Cloudflare Workers AI)')
     .addStringOption((opt) => opt.setName('pertanyaan').setDescription('Pertanyaan kamu').setRequired(true)),
   async execute(interaction) {
     const question = interaction.options.getString('pertanyaan');
@@ -33,12 +32,9 @@ export default {
       const userId = interaction.user.id;
 
       // memoBlock sudah mencakup legacy facts
-      const [memos, vaultKnowledge] = await Promise.all([
-        memoBlock(guildId, userId, question),
-        vaultBlock(question),
-      ]);
+      const memos = await memoBlock(guildId, userId, question);
 
-      const systemPrompt = `Kamu adalah Dermist, asisten AI di server Discord.${persona}${skills}${memos}${vaultKnowledge}\n\nJawab pertanyaan dengan akurat, faktual, dan ringkas. Jika ada info dari Obsidian Knowledge Base di atas, jadikan itu sebagai rujukan utama. Jangan mengarang informasi. Gunakan bahasa yang sama dengan user.`;
+      const systemPrompt = `Kamu adalah Dermist, asisten AI di server Discord.${persona}${skills}${memos}\n\nJawab pertanyaan dengan akurat, faktual, dan ringkas. Jangan mengarang informasi. Gunakan bahasa yang sama dengan user.`;
 
       const answer = config.workerBaseUrl
         ? await workerAsk(question, systemPrompt)

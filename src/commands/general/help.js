@@ -10,14 +10,14 @@ export default {
       .setColor(config.embedColor)
       .setTitle('📖 Buku Panduan & Daftar Perintah — Dermist Bot')
       .setDescription(
-        `Halo <@${interaction.user.id}>! Dermist adalah bot All-in-One: **AI Assistant (Llama 3.3 70B)** + **Smart Memory** + **Obsidian Knowledge** + **Auto-Moderasi**.\n\nTotal **25 slash command** tersedia:`
+        `Halo <@${interaction.user.id}>! Dermist adalah bot All-in-One: **AI Assistant (Llama 3.3 70B)** + **Smart Memory** + **Auto-Moderasi**.\n\nTotal **24 slash command** tersedia:`
       )
       .addFields(
         {
           name: '🤖 1. AI Assistant & Obrolan',
           value:
             '• **Mention** `@Dermist <pesan>` — Ngobrol langsung dengan AI\n' +
-            '• `/ask <pertanyaan>` — Tanya apa saja ke AI (terhubung dengan catatan server)\n' +
+            '• `/ask <pertanyaan>` — Tanya apa saja ke AI\n' +
             '• `/translate <teks> <bahasa>` — Terjemahkan teks otomatis',
           inline: false,
         },
@@ -33,14 +33,7 @@ export default {
           inline: false,
         },
         {
-          name: '📚 3. Obsidian Knowledge Base',
-          value:
-            '• `/vault search <query>` — Cari topik di arsip catatan Markdown Obsidian\n' +
-            '• `/vault status` — Cek status sinkronisasi dokumen ke Cloudflare KV',
-          inline: false,
-        },
-        {
-          name: '⚙️ 4. Setup & Server Management',
+          name: '⚙️ 3. Setup & Server Management',
           value:
             '• `/setup-server <template>` — **Setup otomatis seluruh server** (Roles, Channels, Rules)\n' +
             '• `/setup` — Setup cepat channel khusus bot\n' +
@@ -49,7 +42,7 @@ export default {
           inline: false,
         },
         {
-          name: '🛡️ 5. Moderasi & Proteksi Server (Staff)',
+          name: '🛡️ 4. Moderasi & Proteksi Server (Staff)',
           value:
             '• `/warn <user> <alasan>` — Peringatan (auto-mute di 2x & 3x warning)\n' +
             '• `/mute <user> <durasi> <alasan>` — Timeout member sementara\n' +
@@ -60,7 +53,7 @@ export default {
           inline: false,
         },
         {
-          name: 'ℹ️ 6. Info & Utilitas',
+          name: 'ℹ️ 5. Info & Utilitas',
           value:
             '• `/ping` — Cek latency & koneksi bot ke Discord API\n' +
             '• `/serverinfo` — Tampilkan statistik lengkap server ini\n' +

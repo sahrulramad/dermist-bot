@@ -4,7 +4,6 @@ import { isInjection, FALLBACK_REPLY } from '../utils/guards.js';
 import { getPersonaBlock } from '../utils/persona.js';
 import { getSkillsBlock } from '../utils/skills.js';
 import { memoBlock, addHistory, getHistory, shouldExtract, resetTurnCount, autoSaveExtractedFacts } from '../utils/memory.js';
-import { vaultBlock } from '../utils/vault.js';
 import { trackMessage, isSpamming, getSpamCount } from '../utils/spam-detect.js';
 import { isToxic, isSlur, getToxicReason } from '../utils/toxic-detect.js';
 import { extractFacts } from '../utils/cloudflare-ai.js';
@@ -61,12 +60,8 @@ async function handleAgentMessage(message, triggerReason) {
     const persona = getPersonaBlock();
     const skills = getSkillsBlock(content);
     
-    // Memo System (sudah termasuk legacy facts) + Obsidian Vault Knowledge
-    const [memos, vaultKnowledge] = await Promise.all([
-      memoBlock(guildId, userId, content),
-      vaultBlock(content),
-    ]);
-    const memoryAndKnowledge = memos + vaultKnowledge;
+    // Memo System (sudah termasuk legacy facts)
+    const memoryAndKnowledge = await memoBlock(guildId, userId, content);
 
     const history = await getHistory(userId);
     const server = `\n\n<data_server>\n${serverContext}\n</data_server>`;

@@ -41,7 +41,7 @@ const CH = {
   general: { key: 'general', name: '💬・general-chat', type: TEXT, topic: 'Obrolan santai antar sesama member komunitas.' },
   media: { key: 'media', name: '📸・media-share', type: TEXT, topic: 'Bagi-bagi foto, screenshot seru, video, atau meme.' },
   saran: { key: 'saran', name: '💡・saran-masukan', type: TEXT, topic: 'Punya ide atau kritik untuk server? Tulis di sini!' },
-  botChat: { key: 'botChat', name: '🤖・bot-chat', type: TEXT, topic: 'Ngobrol dengan @Dermist dan coba command /ask, /memo, /vault!' },
+  botChat: { key: 'botChat', name: '🤖・bot-chat', type: TEXT, topic: 'Ngobrol dengan @Dermist dan coba command /ask atau /memo!' },
   // Gaming
   mabar: { key: 'mabar', name: '🎮・mabar-chat', type: TEXT, topic: 'Cari teman party mabar Valorant, ML, PUBG, Dota, Minecraft!' },
   clips: { key: 'clips', name: '🔥・clips-highlights', type: TEXT, topic: 'Pamerkan momen clutch dan highlight game kamu!' },
@@ -282,8 +282,7 @@ function botGuideEmbed(guild) {
       {
         name: '🧠 Memory',
         value: '`/memo add` — Simpan preferensi kamu\n`/memo list` — Lihat memo\n`/memo search` — Cari memo\n`/facts` — Lihat yang aku ingat tentangmu',
-      },
-      { name: '📚 Knowledge Base', value: '`/vault search <topik>` — Cari catatan & aturan server\n`/vault status` — Status sinkronisasi' },
+      }
     )
     .setFooter({ text: 'Dermist AI • Always learning & assisting you' });
 }

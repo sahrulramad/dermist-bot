@@ -52,10 +52,9 @@
 
 ### 1. 🧠 Autonomous AI Agent & Contextual Memory
 * **LLM Core:** Didukung model **Meta Llama 3.3 70B Instruct** via Cloudflare Workers AI untuk penalaran cerdas dan latensi rendah.
-* **Tool Calling Orchestration:** AI mampu memanggil tools internal bot secara otonom untuk mengambil informasi server, mencari aturan vault, dan mengeksekusi aksi.
+* **Tool Calling Orchestration:** AI mampu memanggil tools internal bot secara otonom untuk mengambil informasi server dan mengeksekusi aksi.
 * **Persistent KV Memory:** Mengingat riwayat percakapan (`history:{userId}`) serta mengekstrak fakta personal pengguna secara berkala (`facts:{userId}`) menggunakan Cloudflare KV.
 * **Modular Skills System:** Perilaku dan SOP bot diatur melalui file panduan Markdown modular (`src/skills/`), memungkinkan penyesuaian persona dan alur kerja tanpa modifikasi kode inti.
-* **Knowledge Vault:** Integrasi knowledge base (`vault/faq/`, `vault/rules/`) untuk menjawab pertanyaan seputar server secara akurat.
 
 ### 2. 🛡️ Automasi Moderasi & Keamanan Server
 * **Anti-Raid & Spam Protection:** Deteksi otomatis lonjakan pesan spam, toxic behavior, dan flooding gambar dengan aksi mute/timeout berjenjang.
@@ -78,7 +77,6 @@
 | **AI Agent** | `/remember <fakta>` | Menyimpan fakta spesifik pengguna ke memori KV |
 | **AI Agent** | `/facts` | Melihat kumpulan fakta yang diingat AI tentang user |
 | **AI Agent** | `/memo` | Mengelola memo dan catatan internal |
-| **AI Agent** | `/vault` | Menjelajahi dokumen panduan & knowledge base |
 | **Moderasi** | `/warn <user> <alasan>` | Memberikan peringatan resmi (escalates automatically) |
 | **Moderasi** | `/mute <user> <durasi>` | Timeout anggota sementara (60s s/d 7 hari) |
 | **Moderasi** | `/unmute <user>` | Menghapus status timeout |
@@ -102,7 +100,7 @@ dermist-bot/
 │   ├── config.js                 # Central environment & validation config
 │   ├── deploy-commands.js        # Deployment script slash commands ke Discord API
 │   ├── commands/                 # Handler slash commands per kategori
-│   │   ├── ai/                   # ask, remember, facts, memo, vault
+│   │   ├── ai/                   # ask, remember, facts, memo, translate
 │   │   ├── moderation/           # kick, ban, mute, unmute, warn, purge, note
 │   │   ├── channel/              # create, delete, rename, lock, unlock
 │   │   └── general/              # help, ping, setup, setup-server
@@ -112,11 +110,10 @@ dermist-bot/
 │   │   ├── guildMemberAdd.js     # Auto-role & welcome handler
 │   │   └── voiceStateUpdate.js   # Voice channel AFK detection
 │   ├── handlers/                 # Dynamic command & event loader
+│   │   ├── commandHandler.js
+│   │   └── eventHandler.js
 │   ├── skills/                   # Markdown-defined agent behavioral skills
 │   └── utils/                    # Core modules (agent, tools, memory, logger, anti-raid)
-├── vault/                        # Server knowledge base & SOP documents
-│   ├── faq/                      # Frequently Asked Questions
-│   └── rules/                    # Official server guidelines
 ├── workers/                      # Cloudflare Serverless Workers
 │   ├── ai-agent/                 # Hono REST API for Llama 3.3 70B & KV memory
 │   └── cron-jobs/                # Scheduled cron trigger routines

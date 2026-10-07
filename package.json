@@ -12,7 +12,7 @@
     "worker:ai:deploy": "npm --prefix workers/ai-agent run deploy",
     "worker:cron:dev": "npm --prefix workers/cron-jobs run dev",
     "worker:cron:deploy": "npm --prefix workers/cron-jobs run deploy",
-    "vault:sync": "node scripts/vault-sync.js"
+    "bundle": "powershell -ExecutionPolicy Bypass -File scripts/bundle.ps1"
   },
   "engines": {
     "node": ">=18.0.0"
