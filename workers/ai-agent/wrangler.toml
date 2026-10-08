@@ -14,6 +14,8 @@ id = "3cf71188b1d14f09a788b1580b8773c0"
 # Environment variables
 [vars]
 ENVIRONMENT = "production"
+CLIENT_ID = "1556845543605403658"
+DISCORD_PUBLIC_KEY = "c7f869c51c6e2bf2450cf8f0e921166770e2b809ba204d77d7f3c5e2d7ca5919"
 
 # Secrets (di-set via: wrangler secret put SECRET_NAME)
 # - AUTH_SECRET: shared secret untuk autentikasi antara bot ↔ worker

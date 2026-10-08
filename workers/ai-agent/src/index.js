@@ -20,14 +20,18 @@ import { askRoute } from './routes/ask.js';
 import { translateRoute } from './routes/translate.js';
 import { moderateRoute } from './routes/moderate.js';
 import { extractFactsRoute } from './routes/extract-facts.js';
+import { interactionsRoute } from './routes/interactions.js';
 import { authMiddleware } from './middleware/auth.js';
 
 const app = new Hono();
 
+// ─── Discord Interactions Webhook (tanpa bearer auth, diverifikasi via Ed25519) ───
+app.route('/interactions', interactionsRoute);
+
 // ─── CORS ───
 app.use('*', cors());
 
-// ─── Auth Middleware (shared secret) ───
+// ─── Auth Middleware (shared secret) untuk internal REST API ───
 app.use('/api/*', authMiddleware);
 
 // ─── Routes ───

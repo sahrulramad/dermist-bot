@@ -9,6 +9,7 @@
     "tail": "wrangler tail"
   },
   "dependencies": {
+    "discord-interactions": "^4.4.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {
